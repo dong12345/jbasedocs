@@ -1,0 +1,4 @@
+baseurl: ""
+theme: jekyll-theme-primer
+include:
+  - jbase_common
