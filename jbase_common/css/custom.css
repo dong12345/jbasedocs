@@ -1,0 +1,14 @@
+/* 字体覆盖 - 替换 Source Sans Pro 为系统字体 */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+}
+
+/* 代码字体 */
+code, pre, pre code, .markdown-section code, .markdown-section pre {
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace !important;
+}
+
+/* 主题色保持 */
+:root {
+  --theme-color: #42b983;
+}
