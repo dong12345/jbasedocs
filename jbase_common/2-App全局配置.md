@@ -50,11 +50,11 @@ App.InitializeServices(app.ApplicationServices);
 #### 获取字符串配置
 
 ```csharp
-// 获取单个配置值
-var value = App.GetValue("Jwt", "Issuer");
+// 获取配置值（不存在返回空字符串）
+var value = App.GetValue("Jwt:Issuer");
 
-// 获取嵌套配置
-var secret = App.GetValue("Jwt", "SecretKey");
+// 获取嵌套配置，带默认值
+var secret = App.GetValue("Jwt:SecretKey", "默认密钥");
 ```
 
 #### 获取强类型配置对象
@@ -220,7 +220,10 @@ public class UserService
         var logger = App.GetServiceOrDefault<ILogger<UserService>>();
 
         // 读取配置
-        var customValue = App.GetValue("CustomSection", "Key");
+        var customValue = App.GetValue("CustomSection:Key");
+        var customValue2 = App.GetValue("CustomSection:Key", "默认值");
+        var customConfig = App.GetConfig<MyOptions>("MySection");
+        var customConfig2 = App.GetConfig<MyOptions>("MySection", new MyOptions());
     }
 }
 ```
