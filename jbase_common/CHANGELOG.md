@@ -12,6 +12,11 @@
 - 新增 `OnCooldownEnd` 回调功能，支持冷却结束通知
 - 新增 `CustomKeyPrefix` 和 `IgnoreParameters` 配置选项
 
+### 修复
+
+- 修复 `JobAutoRegistrar.RegisterJobs()` 单独使用时任务无法创建实例的问题
+- 修复 `JobAutoRegistrar.RegisterJobs()` 调用的任务类型未注册到 DI 容器的问题
+
 ### 优化
 
 - 优化异常处理中间件性能
