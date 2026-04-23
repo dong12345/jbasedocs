@@ -60,12 +60,21 @@ var secret = App.GetValue("Jwt:SecretKey", "默认密钥");
 #### 获取强类型配置对象
 
 ```csharp
-// 获取配置对象
-var jwtOptions = App.GetConfig<JwtOptions>("Jwt");
+// 获取配置对象（始终需要提供默认值）
+var jwtOptions = App.GetConfig<JwtOptions>("Jwt", new JwtOptions());
 
 // 访问配置属性
 var issuer = jwtOptions.Issuer;
 var expires = jwtOptions.Expires;
+
+// 获取数值配置
+var timeout = App.GetConfig<int>("Settings:Timeout", 30);
+
+// 获取布尔配置
+var enabled = App.GetConfig<bool>("Settings:Enabled", false);
+
+// 获取集合配置
+var corsList = App.GetConfig<string[]>("AllowCors", Array.Empty<string>());
 ```
 
 ### 3. 服务获取
@@ -222,7 +231,7 @@ public class UserService
         // 读取配置
         var customValue = App.GetValue("CustomSection:Key");
         var customValue2 = App.GetValue("CustomSection:Key", "默认值");
-        var customConfig = App.GetConfig<MyOptions>("MySection");
+        var customConfig = App.GetConfig<MyOptions>("MySection", new MyOptions());
         var customConfig2 = App.GetConfig<MyOptions>("MySection", new MyOptions());
     }
 }
