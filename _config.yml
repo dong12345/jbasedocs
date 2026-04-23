@@ -3,6 +3,7 @@ theme: jekyll-theme-primer
 include:
   - jbase_common
   - jbase_freesql
+  - jbase_library
   
 # 新增这行！让下划线开头的_sidebar.md正常发布
 include: ["_sidebar.md"]
