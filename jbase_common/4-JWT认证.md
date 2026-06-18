@@ -164,6 +164,12 @@ public class SomeService
                 case JwtResEnum.Unauthorized:
                     // Token 无效
                     break;
+                case JwtResEnum.Authorize_Failed:
+                    // 授权失败
+                    break;
+                case JwtResEnum.Forbidden:
+                    // 拒绝访问
+                    break;
             }
         }
     }
@@ -318,11 +324,35 @@ public interface IUser
     IEnumerable<string> Roles { get; }
 
     /// <summary>
+    /// 邮箱（对应 ClaimTypes.Email）
+    /// </summary>
+    string Email { get; }
+
+    /// <summary>
+    /// 手机号（对应 ClaimTypes.MobilePhone）
+    /// </summary>
+    string Phone { get; }
+
+    /// <summary>
     /// 是否已认证
     /// </summary>
     bool IsAuthenticated { get; }
 }
 ```
+
+> 框架还提供 `IUser<TKey>` 泛型接口与 `User<TKey>` 默认实现，支持 `string`/`int`/`long`/`Guid` 四种主键类型，业务项目可直接注册 `IUser<TKey>` 或基于此扩展自定义实现。
+
+## JwtResEnum 返回枚举
+
+`TokenService.ValidateToken` 返回的第二个参数：
+
+| 枚举值 | 说明 |
+|--------|------|
+| `JwtResEnum.Authorize_Failed` | 授权失败（Token 验证未通过） |
+| `JwtResEnum.Unauthorized` | 未授权（Token 缺失/格式错误） |
+| `JwtResEnum.Expired` | 已过期（Token 已超过 `Expires` 配置的时间） |
+| `JwtResEnum.Authorized` | 已授权（验证通过） |
+| `JwtResEnum.Forbidden` | 拒绝访问 |
 
 ## 自定义用户信息解析
 

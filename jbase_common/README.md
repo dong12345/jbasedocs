@@ -44,6 +44,7 @@ dotnet add package JBase.Common
 - [请求防护](8-请求防护.md) - 防高频、防重复
 - [操作日志](9-操作日志.md) - 自动记录操作日志
 - [扩展方法](10-扩展方法.md) - IServiceCollection 扩展
+- [辅助工具](11-辅助工具.md) - TraceIdHelper / HttpClientHelper / EmailHelper 等
 
 ## 版本历史
 

@@ -162,7 +162,7 @@ public class AppInitOptions
     /// <summary>
     /// AllowCors配置项在配置文件中的节点路径，默认 "AllowCors"
     /// </summary>
-    public string AllowCorsKey { get; set; } } = "AllowCors";
+    public string AllowCorsKey { get; set; } = "AllowCors";
 }
 ```
 
