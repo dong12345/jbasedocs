@@ -19,6 +19,7 @@
 | [帮助类](5-帮助类) | `JBaseLibrary.Helpers` | 文件、Excel、二维码、压缩、图片压缩、JSON、日期、缓存、搜索、验证 等 |
 | [验证模块](6-验证模块) | `JBaseLibrary.Validate` | `ValidateContext` 链式验证器、`ValidateHelper` 通用校验 |
 | [拼音模块](7-拼音模块) | `JBaseLibrary.NPinyin` | 汉字 ↔ 拼音 |
+| [Excel模块](8-Excel模块) | `JBaseLibrary.Excel` | `ExcelHelper` 导入/导出/模板生成，支持动态列与图片 |
 
 ## NuGet 安装
 
@@ -274,6 +275,7 @@ Guid id = GuidHelper.Next();
 - [帮助类](5-帮助类)
 - [验证模块](6-验证模块)
 - [拼音模块](7-拼音模块)
+- [Excel模块](8-Excel模块)
 
 ## 版本信息
 
