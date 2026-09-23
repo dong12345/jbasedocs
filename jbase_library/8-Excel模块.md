@@ -345,7 +345,39 @@ ExcelHelper.GenerateImportTemplateToStream<ProductDto>(
 
 ## 5. ASP.NET Core 一站式下载（`JBase.Common`）
 
-如果项目已引入 `JBase.Common`，可直接用 `HttpResponse` 扩展把 Excel **流式输出到浏览器**，无需手动处理 `Content-Type` / `Content-Disposition`（已自动按 RFC 5987 编码中文文件名）：
+如果项目已引入 `JBase.Common`，推荐直接用 `HttpResponse` 扩展方法 —— **文件名只写一遍**，Content-Type / Content-Disposition / 同步 IO 等 HTTP 样板代码全部内部处理。
+
+### 5.1 分层架构
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ JBase.Common.Excel  (推荐：Web 场景，文件名只写一遍)          │
+│  Response.WriteExcelAsync            → 固定列导出            │
+│  Response.WriteExcelWithImagesAsync  → 图片导出             │
+│  Response.WriteExcelWithDynamicColumnsAsync → 动态列        │
+│  Response.WriteExcelImportTemplateAsync → 导入模板           │
+│                                                              │
+│  ↓ 内部使用（internal，不对外暴露）                           │
+│  ExcelHttpResponseExtensions.WriteExcelStreamAsync  (底层原语)│
+├────────────────────────────────────────────────────────────┤
+│ JBaseLibrary.Excel  (底层：任意 Stream 输出场景)            │
+│  ExcelHelper.ExportExcelWithImagesAsyncToStream  → 流式写  │
+│  ExcelHelper.ExportExcelWithImagesAsync           → byte[] │
+│  (Console / WinForms / 写文件 / 上传云存储 / 测试 均用此层)  │
+└────────────────────────────────────────────────────────────┘
+```
+
+- **Web 一站式下载** → `JBase.Common` 扩展（文件名只写一遍，自动处理 HTTP 样板）
+- 底层 `WriteExcelStreamAsync` 已标记为 `internal`，外部业务代码看不到，
+  避免误用回调式 API 导致重复写文件名 / 手动构建 Header。
+- **通用 Stream**（Console / 写文件 / 上传 OSS / WPF） → `ExcelHelper.ToStream` 系列
+- **小数据量 / 简单场景** → `ExcelHelper` 的 `byte[]` 版本
+
+### 5.2 用法示例
+
+所有扩展方法均支持 **中文文件名**，内部自动按 RFC 5987 做 UTF-8 百分号编码。
+
+**固定列导出**
 
 ```csharp
 using JBase.Common.Excel;
@@ -353,47 +385,120 @@ using JBase.Common.Excel;
 [HttpGet]
 public async Task Export()
 {
+    var products = LoadProducts();   // 来自数据库
+    await Response.WriteExcelAsync(
+        sheetName:         "产品列表",
+        list:              products,
+        downloadFileName:  "产品列表.xlsx",
+        isShowTitle:       true,
+        titleRGB:          new byte[] { 26, 140, 155 });
+}
+```
+
+**图片导出**
+
+```csharp
+[HttpGet]
+public async Task ExportWithImages([FromQuery] string imageBaseUrl)
+{
     var products = LoadProducts();
+    var imageOptions = new ExcelImageOptions
+    {
+        ImageBaseUrl = imageBaseUrl,
+        Width        = 100,
+        Height       = 100
+    }.WithAutoImageColumns<ProductDto>();   // 自动收集所有 IsImageUrl=true 的属性
 
     await Response.WriteExcelWithImagesAsync(
         sheetName:         "产品列表",
         list:              products,
-        downloadFileName:  "产品列表.xlsx",         // 中文文件名安全
-        imageOptions:      new ExcelImageOptions { Width = 100, Height = 100 });
+        downloadFileName:  "产品列表.xlsx",
+        imageOptions:      imageOptions);
 }
 ```
 
-`JBase.Common.Excel` 的 `WriteExcelWithImagesAsync` 会自动：
+**动态列导出**
 
-- 设置正确的 `Content-Type`（xlsx / xls）
-- 用 RFC 5987 编码中文文件名
-- 临时开启 Kestrel 同步 IO（NPOI 写入为同步 API），写完后恢复原值
+```csharp
+[HttpGet]
+public async Task ExportScores()
+{
+    var records = GetScoreRecords();
 
-> 详见 `JBase.Common` 项目文档。
+    var cfg = new DynamicColumnConfig
+    {
+        PropertyName  = nameof(ScoreRecord.ExpertScores),
+        HeaderTitle   = "评分详情",
+        LabelProperty = nameof(ExpertScore.ExpertName),
+        ValueProperty = nameof(ExpertScore.Score),
+        ValueSuffix   = "分"
+    };
+
+    await Response.WriteExcelWithDynamicColumnsAsync(
+        sheetName:         "成绩表",
+        list:              records,
+        dynamicColumnConfig: cfg,
+        downloadFileName:  "成绩表.xlsx");
+}
+```
+
+**下载导入模板**
+
+```csharp
+[HttpGet]
+public async Task DownloadTemplate()
+{
+    await Response.WriteExcelImportTemplateAsync<ProductDto>(
+        sheetName:         "产品导入",
+        downloadFileName:  "产品导入模板.xlsx");
+}
+```
+
+### 5.3 内部处理细节（用户无感知）
+
+| 处理项 | 说明 |
+|--------|------|
+| `Content-Type` | 自动根据扩展名（.xlsx / .xls）设置对应 MIME |
+| `Content-Disposition` | 中文文件名按 RFC 5987 编码（`filename*=UTF-8''...`），兼容现代浏览器 + 老浏览器回落 |
+| 同步 IO 许可 | 临时开启 `IHttpBodyControlFeature.AllowSynchronousIO`（NPOI XSSFWorkbook.Write 是同步 API），方法结束后恢复原值 |
+| 流释放 | `try/finally` 保证异常时也不泄漏文件句柄 |
 
 ---
 
 ## 6. 方法汇总
 
+### 6.1 JBaseLibrary（底层，通用）
+
 | 方法 | 返回 | 说明 |
 |------|------|------|
 | `ExportExcel<T>(name, headers, list, isXlsx?, isShowTitle?, titleRGB?)` | `byte[]` | 固定列导出（byte[]） |
-| `ExportExcelToStream<T>(...)` | `void` | 固定列导出（写到 Stream） |
+| `ExportExcelToStream<T>(...)` | `void` | 固定列导出（写到任意 Stream） |
 | `ExportExcelWithDynamicColumns<T>(...)` | `byte[]` | 动态列导出（byte[]） |
-| `ExportExcelWithDynamicColumnsToStream<T>(...)` | `void` | 动态列导出（写到 Stream） |
+| `ExportExcelWithDynamicColumnsToStream<T>(...)` | `void` | 动态列导出（写到任意 Stream） |
 | `ExportExcelWithImages<T>(...)` | `byte[]` | 图片导出，**同步**（byte[] 图片列） |
-| `ExportExcelWithImagesToStream<T>(...)` | `void` | 图片导出，**同步**（写到 Stream） |
-| `ExportExcelWithImagesAsync<T>(...)` | `Task<byte[]>` | 图片导出，**异步**（下载 URL） |
-| `ExportExcelWithImagesAsyncToStream<T>(...)` | `Task` | 图片导出，**异步**（写到 Stream） |
+| `ExportExcelWithImagesToStream<T>(...)` | `void` | 图片导出，**同步**（写到任意 Stream） |
+| `ExportExcelWithImagesAsync<T>(...)` | `Task<byte[]>` | 图片导出，**异步**（下载 URL 图片） |
+| `ExportExcelWithImagesAsyncToStream<T>(...)` | `Task` | 图片导出，**异步**（写到任意 Stream） |
 | `ReadExcel<T>(IFormFile, headRow, contentRow, options?)` | `IList<T>` | 读取上传文件，强类型 |
 | `ReadExcel<T>(string, headRow, contentRow, options?)` | `IList<T>` | 读取文件路径，强类型 |
 | `ReadExcel(IFormFile, headRow, contentRow, options?)` | `DataSet` | 读取上传文件，原始 DataSet |
 | `ReadExcel(string, headRow, contentRow, options?)` | `DataSet` | 读取文件路径，原始 DataSet |
-| `ReadExcelRowStreamAsync(IFormFile, headRow, contentRow, options?, ct?)` | `IAsyncEnumerable<ExcelRow>` | 流式读取上传文件 |
-| `ReadExcelRowStreamAsync(string, headRow, contentRow, options?, ct?)` | `IAsyncEnumerable<ExcelRow>` | 流式读取文件路径 |
+| `ReadExcelRowStreamAsync(IFormFile, ...)` | `IAsyncEnumerable<ExcelRow>` | 流式读取上传文件 |
+| `ReadExcelRowStreamAsync(string, ...)` | `IAsyncEnumerable<ExcelRow>` | 流式读取文件路径 |
 | `GenerateImportTemplate<T>(sheetName?, isXlsx?, isShowTitle?, titleRGB?)` | `byte[]` | 生成导入模板（byte[]） |
-| `GenerateImportTemplateToStream<T>(...)` | `void` | 生成导入模板（写到 Stream） |
-| `BuildHeadersFromType<T>()` | `ExcelHeadersResult` | 反射构建表头 + 图片列名（内部辅助） |
+| `GenerateImportTemplateToStream<T>(...)` | `void` | 生成导入模板（写到任意 Stream） |
+| `BuildHeadersFromType<T>()` | `ExcelHeadersResult` | 反射构建表头 + 图片列名 |
+
+### 6.2 JBase.Common（Web 一站式，文件名只写一遍）
+
+位于 `JBase.Common.Excel` 命名空间，所有方法均为 `HttpResponse` 扩展，自动处理 Content-Type / Content-Disposition / 同步 IO。
+
+| 方法 | 说明 |
+|------|------|
+| `Response.WriteExcelAsync<T>(sheetName, list, downloadFileName, ...)` | 固定列导出 |
+| `Response.WriteExcelWithImagesAsync<T>(sheetName, list, downloadFileName, ...)` | 图片导出 |
+| `Response.WriteExcelWithDynamicColumnsAsync<T>(sheetName, list, cfg, downloadFileName, ...)` | 动态列导出 |
+| `Response.WriteExcelImportTemplateAsync<T>(sheetName, downloadFileName, ...)` | 下载导入模板 |
 
 ---
 
@@ -401,16 +506,20 @@ public async Task Export()
 
 | 场景 | 推荐 API |
 |------|----------|
-| 导出小数据量、直接返回文件下载 | `ExportExcel<T>` → `byte[]` |
-| 导出大数据量、写入 `Response.Body` | `ExportExcelToStream<T>` |
-| 评分表 / 专家列表等"列不固定" | `ExportExcelWithDynamicColumns<T>` |
-| 列表里有图片，`byte[]` 类型 | `ExportExcelWithImages<T>` |
-| 列表里有图片，存的是 URL 字符串 | `ExportExcelWithImagesAsync<T>` |
-| 读取普通 Excel → `IList<T>` | `ReadExcel<T>(file, 0, 1)` |
-| 读取并想保留原始 `DataSet` | `ReadExcel(file, 0, 1)` |
-| 百万行导入，内存敏感 | `ReadExcelRowStreamAsync(file, 0, 1)` |
-| 给用户下载导入模板 | `GenerateImportTemplate<T>` |
-| Web 一键下载（处理中文文件名 / Kestrel 同步 IO） | `JBase.Common.Excel.WriteExcelWithImagesAsync` |
+| **ASP.NET Core**（推荐 Web 项目）| |
+| 导出普通表格到浏览器 | `Response.WriteExcelAsync<T>(...)` |
+| 导出带图片的表格到浏览器 | `Response.WriteExcelWithImagesAsync<T>(...)` |
+| 导出动态列到浏览器 | `Response.WriteExcelWithDynamicColumnsAsync<T>(...)` |
+| 下载导入模板 | `Response.WriteExcelImportTemplateAsync<T>(...)` |
+| **通用场景**（Console / WinForms / 后台服务）| |
+| 导出到 `FileStream` | `ExcelHelper.ExportExcelToStream<T>(...)` 等 `ToStream` 系列 |
+| 上传到云存储 / `NetworkStream` | `ExcelHelper.Export*ToStream` 系列 |
+| 小数据量、要 `byte[]` | `ExcelHelper.ExportExcel<T>(...)` |
+| 单元测试 / 直接拿字节 | `ExcelHelper.ExportExcel<T>(...)` 返回 `byte[]` |
+| **读取**| |
+| 普通读取 → `IList<T>` | `ExcelHelper.ReadExcel<T>(file, 0, 1)` |
+| 普通读取 → `DataSet` | `ExcelHelper.ReadExcel(file, 0, 1)` |
+| 百万行导入（内存敏感） | `ExcelHelper.ReadExcelRowStreamAsync(file, 0, 1)` |
 
 ---
 
